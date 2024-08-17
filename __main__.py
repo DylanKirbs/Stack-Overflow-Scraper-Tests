@@ -21,11 +21,12 @@ import os
 from datetime import datetime
 
 import requests
+from deepdiff import DeepDiff
 from docopt import docopt
 from dotenv import load_dotenv
 from termcolor import colored
 
-args = docopt(__doc__)
+args = docopt(str(__doc__))
 load_dotenv()
 
 
@@ -192,9 +193,10 @@ def setup_logger():
     formatter = CustomFormatter(
         "[%(asctime)s] %(levelname)s: %(message)s",
         {
-            '[START]': lambda s: colored(s, 'white', 'on_blue', attrs=['bold']),
-            '[PASS]': lambda s: colored(s, 'white', 'on_green', attrs=['bold']),
-            '[FAIL]': lambda s: colored(s, 'black', 'on_red', attrs=['bold'])
+            '[START]': lambda s: colored(s, 'black', 'on_blue', attrs=['bold']),
+            '[PASS]': lambda s: colored(s, 'black', 'on_green', attrs=['bold']),
+            '[FAIL]': lambda s: colored(s, 'black', 'on_red', attrs=['bold']),
+            '[RUNNING]': lambda s: colored(s, 'black', 'on_yellow', attrs=['bold']),
         })
 
     # Console handler
@@ -210,82 +212,7 @@ def setup_logger():
     logger.addHandler(fh)
 
 
-def list_diff(list1, list2, id: int = 0, log_fmt: str = "Test {id} - Expected '{expected}' : Found '{found}'"):
-    """
-    Compare two lists and print the differences.
-
-    :param list1: The first list
-    :param list2: The second list
-    :return: True if the lists are the same, False otherwise
-    """
-
-    match = True
-
-    if len(list1) != len(list2):
-        logger.info(log_fmt.format(id=id, expected=f'length {
-                    len(list1)}', found=f'length {len(list2)}'))
-        match = False
-
-    for expected_val in list1:
-        if expected_val not in list2:
-            logger.info(log_fmt.format(
-                id=id, expected=expected_val, found="None"))
-            match = False
-
-    for found_val in list2:
-        if found_val not in list1:
-            logger.info(log_fmt.format(
-                id=id, expected="None", found=found_val))
-            match = False
-
-    return match
-
-
-def json_diff(json1, json2, id: int = 0, log_fmt: str = "Test {id} - Expected {key_val} '{expected}' : Found {key_val} '{found}'"):
-    """
-    Recursively compare two json objects and print the differences.
-
-    :param json1: The first json object
-    :param json2: The second json object
-    :return: True if the json objects are the same, False otherwise
-    """
-
-    match = True
-
-    for expected_key, expected_value in json1.items():
-
-        # Check if the key is in the second json object
-        if expected_key not in json2:
-            logger.info(log_fmt.format(id=id, key_val='key',
-                        expected=expected_key, found="None"))
-            match = False
-            continue
-
-        if not (isinstance(expected_value, list) or isinstance(expected_value, dict)):
-            if expected_value != json2[expected_key]:
-                logger.info(log_fmt.format(id=id, key_val=f'value for {expected_key}',
-                            expected=expected_value, found=json2[expected_key]))
-                match = False
-
-        elif isinstance(expected_value, dict):
-            match &= json_diff(
-                expected_value, json2[expected_key], id, log_fmt)
-
-        elif isinstance(expected_value, list):
-            match &= list_diff(
-                expected_value, json2[expected_key], id)
-
-    # Check for unexpected keys
-    for unexpected_key in json2:
-        if unexpected_key not in json1:
-            logger.info(log_fmt.format(id=id, key_val='key',
-                        expected="None", received=unexpected_key))
-            match = False
-
-    return match
-
-
-def compare(id: int, endpoint: str):
+def run_test(id: int, endpoint: str):
     """
     Make a call to the cached api and the scraper endpoints and compare the results.
 
@@ -299,9 +226,9 @@ def compare(id: int, endpoint: str):
     queries.append("site=stackoverflow")
 
     logger.info(f"Test {id} [START] : {endpoint}?{'&'.join(queries)}")
-    passed = True
 
     # Get the cached response
+    logger.info(f"Test {id} [RUNNING] : Getting API response")
     cached_api = API_Cache(f"{API_URL}{endpoint}?{'&'.join(queries)}")
     cached_response = cached_api.fetch()
 
@@ -310,20 +237,31 @@ def compare(id: int, endpoint: str):
     cached_response.pop('quota_remaining')
 
     # Get the response from the scraper
+    logger.info(f"Test {id} [RUNNING] : Getting Scraper response")
     response = requests.get(f"{SCRAPER_URL}{endpoint}?{'&'.join(queries)}")
 
     # Compare the responses
     if response.status_code != 200:
         logger.error(
-            f"Test {id} [FAIL] - Bad response code: {response.status_code}")
+            f"Test {id} [FAIL] - Bad response code: {response.status_code} : {response.text}")
         return
 
     scraper_response = response.json()
 
-    if not json_diff(cached_response, scraper_response, id):
-        passed = False
+    diff = DeepDiff(cached_response, scraper_response, ignore_order=True)
+    out = {
+        'diff': diff.to_dict(),
+        'cached': cached_response,
+        'scraper': scraper_response,
+    }
+    print(json.dumps(out, indent=4), file=open(f'results/{id}.json', 'w'))
+    logger.info(
+        f"Test {id} [RUNNING] : Results written to results/{id}.json")
 
-    logger.info(f"Test {id} {'[PASS]' if passed else '[FAIL]'}")
+    if diff == {}:
+        logger.info(f"Test {id} [PASS] : No differences found")
+    else:
+        logger.info(f"Test {id} [FAIL] : Differences found")
 
 
 @atexit.register
@@ -359,7 +297,7 @@ def main():
 
     # Run the tests
     for idx, test in enumerate(test_cases):
-        compare(idx, test)
+        run_test(idx, test)
 
 
 if __name__ == "__main__":

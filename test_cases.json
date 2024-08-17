@@ -1,4 +1,8 @@
 [
     "/collectives",
-    "/collectives?order=asc&min=10"
+    "/collectives?order=asc&min=10",
+    "/questions",
+    "/questions/10",
+    "/answers/10",
+    "/questions/10/answers"
 ]
