@@ -3,5 +3,7 @@
     "/collectives?order=asc",
     "/collectives?order=desc",
     "/questions",
-    "/questions?page=2&pagesize=5&tagged=django"
+    "/questions?tab=Bounties",
+    "/questions/1732348",
+    "/questions/11227809"
 ]

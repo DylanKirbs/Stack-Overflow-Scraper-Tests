@@ -19,6 +19,7 @@ import json
 import logging
 import os
 from datetime import datetime
+from time import sleep
 
 import requests
 from deepdiff import DeepDiff
@@ -250,6 +251,7 @@ def run_test(id: int, endpoint: str):
 
     diff = DeepDiff(cached_response, scraper_response, ignore_order=True)
     out = {
+        'endpoint': endpoint,
         'diff': diff.to_dict(),
         'cached': cached_response,
         'scraper': scraper_response,
@@ -283,17 +285,28 @@ def main():
 
     # Wait for the service to start
     logger.info("Waiting for the service to start")
+    retries = 0
     while True:
+        if retries > 10:
+            logger.error("Failed to start the service")
+            return
+
+        retries += 1
         try:
-            response = requests.get(f"{SCRAPER_URL}/questions")
-            if response.status_code == 200:
+            response = requests.get(f"{SCRAPER_URL}/this-url-should-not-exist")
+            if response.status_code == 404:
                 break
         except requests.exceptions.RequestException:
+            sleep(0.5)
             pass
 
     # Load the test cases
     with open(TEST_CASES_PATH, "r") as f:
         test_cases = json.loads(f.read())
+
+    # remove old results
+    for file in os.listdir('results'):
+        os.remove(f'results/{file}')
 
     # Run the tests
     for idx, test in enumerate(test_cases):
