@@ -299,7 +299,8 @@ def main():
     logger.info(f"Test 0 [START] : bad-endpoint")
     resp = requests.get(f"{SCRAPER_URL}/bad-endpoint")
     if resp.status_code != 400:
-        logger.info(f"Test 0 [FAIL] : Bad endpoint did not return 400")
+        logger.info(f"Test 0 [FAIL] : Bad endpoint got {
+                    resp.status_code} not 400")
     else:
         logger.info(f"Test 0 [PASS] : Bad endpoint returned 400")
 
