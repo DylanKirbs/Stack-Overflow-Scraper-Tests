@@ -295,9 +295,17 @@ def main():
     with open(TEST_CASES_PATH, "r") as f:
         test_cases = json.loads(f.read())
 
+    # Do a bad endpoint test
+    logger.info(f"Test 0 [START] : bad-endpoint")
+    resp = requests.get(f"{SCRAPER_URL}/bad-endpoint")
+    if resp.status_code != 400:
+        logger.info(f"Test 0 [FAIL] : Bad endpoint did not return 400")
+    else:
+        logger.info(f"Test 0 [PASS] : Bad endpoint returned 400")
+
     # Run the tests
     for idx, test in enumerate(test_cases):
-        run_test(idx, test)
+        run_test(idx+1, test)
 
 
 if __name__ == "__main__":

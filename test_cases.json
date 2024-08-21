@@ -1,8 +1,7 @@
 [
     "/collectives",
-    "/collectives?order=asc&min=10",
+    "/collectives?order=asc",
+    "/collectives?order=desc",
     "/questions",
-    "/questions/10",
-    "/answers/10",
-    "/questions/10/answers"
+    "/questions?page=2&pagesize=5&tagged=django"
 ]
