@@ -7,11 +7,14 @@ Notes:
 - This script will set the `STACKOVERFLOW_API_PORT` environment variable.
 
 Usage:
-    tests [options]
+    tests [options] [<test_id> ...]
 
 Options:
     -h --help       Show this screen
     --port=<port>   The port to use for the api [default: 5000]
+
+Examples:
+    tests 1
 """
 
 import atexit
@@ -252,6 +255,7 @@ def run_test(id: int, endpoint: str):
     diff = DeepDiff(cached_response, scraper_response, ignore_order=True)
     out = {
         'endpoint': endpoint,
+        'queries': queries,
         'diff': diff.to_dict(),
         'cached': cached_response,
         'scraper': scraper_response,
@@ -310,6 +314,8 @@ def main():
 
     # Run the tests
     for idx, test in enumerate(test_cases):
+        if args['<test_id>'] and str(idx+1) not in args['<test_id>']:
+            continue
         run_test(idx+1, test)
 
 
