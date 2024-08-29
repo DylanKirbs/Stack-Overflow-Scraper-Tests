@@ -4,6 +4,17 @@
     "/collectives?order=desc",
     "/questions",
     "/questions?tab=Bounties",
+    "/questions?tagged=nitro",
+    "/questions?tagged=nitro&sort=creation_date&min=1640995200&max=1672531199&filter=total",
+    "/questions/7858787",
     "/questions/1732348",
-    "/questions/11227809"
+    "/questions/11227809",
+    "/questions/5725296",
+    "/questions/78908628",
+    "/questions/549",
+    "/questions/927358",
+    "/answers/1732454",
+    "/answers/1984225",
+    "/answers/19226817",
+    "/questions/1732348/answers"
 ]

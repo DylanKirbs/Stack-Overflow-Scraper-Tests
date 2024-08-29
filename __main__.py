@@ -36,8 +36,9 @@ load_dotenv()
 
 # Paths
 BASE_PATH = os.path.abspath(__file__).replace("__main__.py", "")
-API_CACHE_DIR = os.path.join(BASE_PATH, "api_cache")
+RESULTS_DIR = os.path.join(BASE_PATH, "api_cache")
 LOG_DIR = os.path.join(BASE_PATH, "logs")
+RESULTS_DIR = os.path.join(BASE_PATH, "results")
 TEST_CASES_PATH = os.path.join(BASE_PATH, "test_cases.json")
 
 LOG_FILE_TEMPLATE = os.path.join(
@@ -55,8 +56,9 @@ API_URL = "https://api.stackexchange.com/2.3"  # must include ?site=stackoverflo
 
 
 # Create the directories
-os.makedirs(API_CACHE_DIR, exist_ok=True)
+os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
 # If the test cases file does not exist, create it
@@ -120,7 +122,7 @@ class API_Cache:
         self.cache = {}
 
         self.file_path = f"{
-            API_CACHE_DIR}/{self.meta['url'].replace("/", "_")}.json"
+            RESULTS_DIR}/{self.meta['url'].replace("/", "_")}.json"
 
         if not os.path.exists(self.file_path):
             self._save()
@@ -216,6 +218,133 @@ def setup_logger():
     logger.addHandler(fh)
 
 
+def dynamic_pop(data: dict, pops: list[str]):
+    """
+    Recursively remove keys and values from a dictionary or list.
+
+    Example:
+    >>> data = {
+        'key1': 'value1',
+        'key2': 'value2',
+        'key3': {
+            'key4': 'value4',
+            'key5': 'value5'
+        },
+        'key6': [
+            'value6',
+        ]
+    }
+    >>> pops = ['key1', 'value4', 'value6']
+
+    >>> dynamic_pop(data, pops)
+    >>> print(data)
+    >>> {
+        'key2': 'value2',
+        'key3': {
+            'key5': 'value5'
+        },
+        'key6': []
+    }
+
+    :param data: The data to remove items from
+    :param pops: The keys or values to remove
+    :return: The data with the items removed
+    """
+
+    def remove_items(d, pops):
+        if isinstance(d, dict):
+            keys_to_remove = [key for key in d if key in pops]
+            for key in keys_to_remove:
+                d.pop(key)
+            for key, value in d.items():
+                remove_items(value, pops)
+        elif isinstance(d, list):
+            items_to_remove = [item for item in d if item in pops]
+            for item in items_to_remove:
+                d.remove(item)
+            for item in d:
+                remove_items(item, pops)
+
+    remove_items(data, pops)
+
+
+def remove_from_diff(diff: dict, pops: list[str]):
+    """
+    Remove specific keys from the diff if one of the values contains a string in the pops list.
+    If the value is an empty dict or list, it will be removed.
+
+    Example:
+    >>> diff = {
+        "values_changed": {
+            "root['items'][0]['external_links'][1]['link']": {
+                "new_value": "/cdn-cgi/l/email-protection#43223430202c2f2f2620372a352603222e22392c2d6d202c2e",
+                "old_value": "mailto:awscollective@amazon.com"
+            }
+        }
+    >>> pops = ['email-protection']
+    >>> remove_from_diff(diff, pops)
+    >>> print(diff)
+    >>> {}
+
+
+    :param diff: The diff to remove items from
+    :param pops: The strings to check for in the diff
+    """
+
+    to_pop = []
+    if 'values_changed' in diff:
+        for key in diff['values_changed']:
+            for old_new in diff['values_changed'][key].values():
+                for check in pops:
+                    if (isinstance(old_new, str)) and check in old_new:
+                        to_pop.append(key)
+                        break
+
+    for key in to_pop:
+        diff['values_changed'].pop(key)
+
+    # if any values are empty dicts or lists, remove them
+    to_pop = []
+    for key in diff.keys():
+        if diff[key] == {}:
+            to_pop.append(key)
+        elif isinstance(diff[key], list):
+            if len(diff[key]) == 0:
+                to_pop.append(key)
+
+    for key in to_pop:
+        diff.pop(key)
+
+
+def validate_order(t1, t2, comparison_keys):
+    """
+    Check if the order of the items in two dictionaries are the same.
+
+    :param t1: The first dictionary
+    :param t2: The second dictionary
+    :param comparison_keys: The keys to compare the order of
+    """
+
+    for key in comparison_keys:
+        if key not in t1 or key not in t2:
+            logger.debug(f"Key {key} not found in both dictionaries")
+            continue
+
+        if len(t1[key]) != len(t2[key]):
+            logger.debug(f"Length of {key} is different")
+            return False
+
+        for i in range(len(t1[key])):
+            diff = DeepDiff(t1[key][i], t2[key][i], ignore_order=True)
+            remove_from_diff(diff, ['email-protection'])
+
+            if diff != {}:
+                logger.info(f"Order changed in {key} at index {i}: {diff}")
+                return False
+
+    return True
+
+
 def run_test(id: int, endpoint: str):
     """
     Make a call to the cached api and the scraper endpoints and compare the results.
@@ -236,10 +365,6 @@ def run_test(id: int, endpoint: str):
     cached_api = API_Cache(f"{API_URL}{endpoint}?{'&'.join(queries)}")
     cached_response = cached_api.fetch()
 
-    # Pop Quota info
-    cached_response.pop('quota_max')
-    cached_response.pop('quota_remaining')
-
     # Get the response from the scraper
     logger.info(f"Test {id} [RUNNING] : Getting Scraper response")
     response = requests.get(f"{SCRAPER_URL}{endpoint}?{'&'.join(queries)}")
@@ -252,15 +377,43 @@ def run_test(id: int, endpoint: str):
 
     scraper_response = response.json()
 
-    diff = DeepDiff(cached_response, scraper_response, ignore_order=True)
+    # Pop impossible
+    pops = [
+        'quota_max',
+        'quota_remaining',
+        'azure-ad-role',
+        'azure-object-anchors'
+    ]
+    dynamic_pop(cached_response, pops)
+
+    diff = DeepDiff(
+        cached_response,
+        scraper_response,
+        ignore_order=True,
+        significant_digits=2,
+        truncate_datetime='minute'
+    ).to_json()
+    diff = json.loads(diff)
+
+    remove_from_diff(diff, ['email-protection'])
+
+    if diff == {}:
+        logger.debug('No differences found, checking order')
+        # If the responses are the same, check the order of the items
+        if not validate_order(cached_response, scraper_response, ['items']):
+            diff['order_changed'] = "root['items']"
+
     out = {
         'endpoint': endpoint,
         'queries': queries,
-        'diff': diff.to_dict(),
+        'diff': diff,
         'cached': cached_response,
         'scraper': scraper_response,
     }
-    print(json.dumps(out, indent=4), file=open(f'results/{id}.json', 'w'))
+
+    with open(f'results/{id}.json', 'w') as f:
+        print(json.dumps(out, indent=4), file=f)
+
     logger.info(
         f"Test {id} [RUNNING] : Results written to results/{id}.json")
 
