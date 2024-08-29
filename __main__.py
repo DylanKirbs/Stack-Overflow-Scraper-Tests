@@ -344,24 +344,26 @@ def validate_order(t1, t2, comparison_keys):
     :param comparison_keys: The keys to compare the order of
     """
 
+    mismatches = []
+
     for key in comparison_keys:
         if key not in t1 or key not in t2:
-            logger.debug(f"Key {key} not found in both dictionaries")
+            mismatches.append(
+                f"root['{key}''] : 'key not found in both dictionaries'")
             continue
 
         if len(t1[key]) != len(t2[key]):
-            logger.debug(f"Length of {key} is different")
-            return False
+            mismatches.append(f"root['{key}'] : 'length mismatch'")
+            continue
 
         for i in range(len(t1[key])):
             diff = DeepDiff(t1[key][i], t2[key][i], ignore_order=True)
             remove_from_diff(diff,  GLOBAL_IGNORE_DIFF_CONTAINING)
 
             if diff != {}:
-                logger.info(f"Order changed in {key} at index {i}: {diff}")
-                return False
+                mismatches.append(f"root['{key}'][{i}] : 'items mismatch'")
 
-    return True
+    return None if len(mismatches) == 0 else mismatches
 
 
 def run_test(id: int, endpoint: str):
@@ -422,8 +424,10 @@ def run_test(id: int, endpoint: str):
     if diff == {}:
         logger.debug('No differences found, checking order')
         # If the responses are the same, check the order of the items
-        if not validate_order(cached_response, scraper_response, ['items']):
-            diff['order_changed'] = "root['items']"
+        mismatches = validate_order(
+            cached_response, scraper_response, ['items'])
+        if mismatches is not None:
+            diff['order_changed'] = mismatches
 
     out = {
         'endpoint': endpoint,
