@@ -33,12 +33,31 @@ from termcolor import colored
 args = docopt(str(__doc__))
 load_dotenv()
 
+# GLOBAL IGNORE KEYS/FIELDS
+
+GLOBAL_POPS = [
+    # Keys
+    'quota_max',
+    'quota_remaining',
+    'content_license',
+    'accept_rate',
+    'other_site',
+
+    # Values
+    'azure-ad-role',
+    'azure-object-anchors'
+]
+
+GLOBAL_IGNORE_DIFF_CONTAINING = [
+    'email-protection'
+]
+
 
 # Paths
 BASE_PATH = os.path.abspath(__file__).replace("__main__.py", "")
-RESULTS_DIR = os.path.join(BASE_PATH, "api_cache")
+API_DIR = os.path.join(BASE_PATH, "api_cache")
 LOG_DIR = os.path.join(BASE_PATH, "logs")
-RESULTS_DIR = os.path.join(BASE_PATH, "results")
+RESULTS_DIR = os.path.join(os.getcwd(), "results")
 TEST_CASES_PATH = os.path.join(BASE_PATH, "test_cases.json")
 
 LOG_FILE_TEMPLATE = os.path.join(
@@ -56,7 +75,7 @@ API_URL = "https://api.stackexchange.com/2.3"  # must include ?site=stackoverflo
 
 
 # Create the directories
-os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(API_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
@@ -122,7 +141,7 @@ class API_Cache:
         self.cache = {}
 
         self.file_path = f"{
-            RESULTS_DIR}/{self.meta['url'].replace("/", "_")}.json"
+            API_DIR}/{self.meta['url'].replace("/", "_")}.json"
 
         if not os.path.exists(self.file_path):
             self._save()
@@ -336,7 +355,7 @@ def validate_order(t1, t2, comparison_keys):
 
         for i in range(len(t1[key])):
             diff = DeepDiff(t1[key][i], t2[key][i], ignore_order=True)
-            remove_from_diff(diff, ['email-protection'])
+            remove_from_diff(diff,  GLOBAL_IGNORE_DIFF_CONTAINING)
 
             if diff != {}:
                 logger.info(f"Order changed in {key} at index {i}: {diff}")
@@ -373,18 +392,21 @@ def run_test(id: int, endpoint: str):
     if response.status_code != 200:
         logger.error(
             f"Test {id} [FAIL] - Bad response code: {response.status_code} : {response.text}")
+
+        out = {
+            'endpoint': endpoint,
+            'queries': queries,
+            'response': response.json(),
+        }
+        with open(f'{RESULTS_DIR}/{str(id).zfill(2)}-[ERROR].json', 'w') as f:
+            print(json.dumps(out, indent=4), file=f)
         return
 
     scraper_response = response.json()
 
     # Pop impossible
-    pops = [
-        'quota_max',
-        'quota_remaining',
-        'azure-ad-role',
-        'azure-object-anchors'
-    ]
-    dynamic_pop(cached_response, pops)
+    dynamic_pop(cached_response, GLOBAL_POPS)
+    dynamic_pop(scraper_response, GLOBAL_POPS)
 
     diff = DeepDiff(
         cached_response,
@@ -395,7 +417,7 @@ def run_test(id: int, endpoint: str):
     ).to_json()
     diff = json.loads(diff)
 
-    remove_from_diff(diff, ['email-protection'])
+    remove_from_diff(diff, GLOBAL_IGNORE_DIFF_CONTAINING)
 
     if diff == {}:
         logger.debug('No differences found, checking order')
@@ -411,16 +433,12 @@ def run_test(id: int, endpoint: str):
         'scraper': scraper_response,
     }
 
-    with open(f'results/{id}.json', 'w') as f:
+    pass_fail = "[PASS]" if diff == {} else "[FAIL]"
+
+    with open(f'{RESULTS_DIR}/{str(id).zfill(2)}-{pass_fail}.json', 'w') as f:
         print(json.dumps(out, indent=4), file=f)
 
-    logger.info(
-        f"Test {id} [RUNNING] : Results written to results/{id}.json")
-
-    if diff == {}:
-        logger.info(f"Test {id} [PASS] : No differences found")
-    else:
-        logger.info(f"Test {id} [FAIL] : Differences found")
+    logger.info(f"Test {id} {pass_fail}")
 
 
 @atexit.register
@@ -461,9 +479,11 @@ def main():
     with open(TEST_CASES_PATH, "r") as f:
         test_cases = json.loads(f.read())
 
-    # remove old results
-    for file in os.listdir('results'):
-        os.remove(f'results/{file}')
+    # Rename old results, overwrite the previous old results
+    for file in os.listdir(RESULTS_DIR):
+        if file.endswith(".json") and not file.startswith("old_"):
+            os.rename(os.path.join(RESULTS_DIR, file),
+                      os.path.join(RESULTS_DIR, f"old_{file}"))
 
     # Run the tests
     for idx, test in enumerate(test_cases):

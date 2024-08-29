@@ -5,7 +5,7 @@
     "/questions",
     "/questions?tab=Bounties",
     "/questions?tagged=nitro",
-    "/questions?tagged=nitro&sort=creation_date&min=1640995200&max=1672531199&filter=total",
+    "/questions?tagged=nitro&sort=creation&min=1640995200&max=1672531199&filter=total",
     "/questions/7858787",
     "/questions/1732348",
     "/questions/11227809",
