@@ -49,7 +49,7 @@ GLOBAL_POPS = [
 ]
 
 GLOBAL_IGNORE_DIFF_CONTAINING = [
-    'email-protection'
+    # 'email-protection'
 ]
 
 
@@ -348,8 +348,6 @@ def validate_order(t1, t2, comparison_keys):
 
     for key in comparison_keys:
         if key not in t1 or key not in t2:
-            mismatches.append(
-                f"root['{key}''] : 'key not found in both dictionaries'")
             continue
 
         if len(t1[key]) != len(t2[key]):
