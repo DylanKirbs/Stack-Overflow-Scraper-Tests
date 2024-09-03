@@ -470,7 +470,9 @@ def main():
             requests.get(f"{SCRAPER_URL}/this-url-should-not-exist")
         except requests.exceptions.RequestException:
             sleep(0.5)
-            pass
+            continue
+
+        break
 
     # Load the test cases
     with open(TEST_CASES_PATH, "r") as f:
