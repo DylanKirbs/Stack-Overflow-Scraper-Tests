@@ -468,8 +468,6 @@ def main():
         retries += 1
         try:
             response = requests.get(f"{SCRAPER_URL}/this-url-should-not-exist")
-            if response.status_code == 404:
-                break
         except requests.exceptions.RequestException:
             sleep(0.5)
             pass
