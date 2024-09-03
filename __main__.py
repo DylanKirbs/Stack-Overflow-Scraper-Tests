@@ -140,8 +140,7 @@ class API_Cache:
         }
         self.cache = {}
 
-        self.file_path = f"{
-            API_DIR}/{self.meta['url'].replace("/", "_")}.json"
+        self.file_path = f"{API_DIR}/{self.meta['url'].replace("/", "_")}.json"
 
         if not os.path.exists(self.file_path):
             self._save()
@@ -177,8 +176,7 @@ class API_Cache:
             return
 
         if response.status_code != 200:
-            logger.warning(f"Erroneous response from {
-                           self.meta['url']}: {response.status_code}. No changes will be made to the cache.")
+            logger.warning(f"Erroneous response from {self.meta['url']}: {response.status_code}. No changes will be made to the cache.")
             logger.debug(response.text)
             return
 
@@ -457,8 +455,7 @@ def main():
 
     # Start the scraper service
     logger.info(f"Starting the scraper service on port {SCRAPER_PORT}")
-    os.system(f"python3 stackoverflow_scraper.py > {
-              LOG_FILE_TEMPLATE.format(service='scraper')} 2>&1 &")
+    os.system(f"python3 stackoverflow_scraper.py > {LOG_FILE_TEMPLATE.format(service='scraper')} 2>&1 &")
 
     # Wait for the service to start
     logger.info("Waiting for the service to start")
